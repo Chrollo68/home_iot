@@ -1,6 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:hive/hive.dart';
+part 'main.g.dart';
 
-void main() {
+@HiveType(typeId: 0)
+class Schedule extends HiveObject {
+  @HiveField(0)
+  String time;
+
+  Schedule({required this.time});
+}
+
+// TypeAdapter for Schedule
+class ScheduleAdapter extends TypeAdapter<Schedule> {
+  @override
+  final int typeId = 0;
+
+  @override
+  Schedule read(BinaryReader reader) {
+    return Schedule(time: reader.readString());
+  }
+
+  @override
+  void write(BinaryWriter writer, Schedule obj) {
+    writer.writeString(obj.time);
+  }
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Hive
+  await Hive.initFlutter();
+  Hive.registerAdapter(ScheduleAdapter());
+  await Hive.openBox<Schedule>('schedules');
+
   runApp(const SmartHomeApp());
 }
 
@@ -54,6 +88,8 @@ class SmartHomeTabsState extends State<SmartHomeTabs>
 
   @override
   Widget build(BuildContext context) {
+    final scheduleBox = Hive.box<Schedule>('schedules');
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Smart Home"),
@@ -122,47 +158,95 @@ class SmartHomeTabsState extends State<SmartHomeTabs>
               );
             },
           ),
-          // Tab 3: Schedule
-          Center(
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.greenAccent,
-                foregroundColor: Colors.black,
-              ),
-              onPressed: () async {
-                final pickedTime = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.now(),
-                  builder: (context, child) {
-                    return Theme(
-                      data: ThemeData.dark().copyWith(
-                        colorScheme: const ColorScheme.dark(
-                          primary: Colors.greenAccent,
-                          onPrimary: Colors.black,
-                          surface: Colors.black,
-                          onSurface: Colors.white,
+
+          // Tab 3: Schedule (Hive integrated)
+          Column(
+            children: [
+              Expanded(
+                child: ValueListenableBuilder(
+                  valueListenable: scheduleBox.listenable(),
+                  builder: (context, Box<Schedule> box, _) {
+                    if (box.values.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          "No schedules set",
+                          style: TextStyle(color: Colors.white70),
                         ),
-                        dialogTheme: const DialogThemeData(
-                          backgroundColor:
-                              Colors.black, // ✅ now matches the type
-                        ),
-                      ),
-                      child: child!,
+                      );
+                    }
+                    return ListView.builder(
+                      itemCount: box.values.length,
+                      itemBuilder: (context, index) {
+                        final schedule = box.getAt(index);
+                        return Card(
+                          color: Colors.grey[900],
+                          child: ListTile(
+                            title: Text(
+                              "Scheduled at ${schedule?.time}",
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(
+                                Icons.delete,
+                                color: Colors.redAccent,
+                              ),
+                              onPressed: () {
+                                box.deleteAt(index);
+                              },
+                            ),
+                          ),
+                        );
+                      },
                     );
                   },
-                );
-
-                if (!mounted || pickedTime == null) return;
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text("Scheduled at ${pickedTime.format(context)}"),
-                    backgroundColor: Colors.grey[800],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.greenAccent,
+                    foregroundColor: Colors.black,
                   ),
-                );
-              },
-              child: const Text("Set Schedule"),
-            ),
+                  onPressed: () async {
+                    final pickedTime = await showTimePicker(
+                      context: context,
+                      initialTime: TimeOfDay.now(),
+                      builder: (context, child) {
+                        return Theme(
+                          data: ThemeData.dark().copyWith(
+                            colorScheme: const ColorScheme.dark(
+                              primary: Colors.greenAccent,
+                              onPrimary: Colors.black,
+                              surface: Colors.black,
+                              onSurface: Colors.white,
+                            ),
+                            dialogTheme: const DialogThemeData(
+                              backgroundColor: Colors.black,
+                            ),
+                          ),
+                          child: child!,
+                        );
+                      },
+                    );
+
+                    if (!mounted || pickedTime == null) return;
+
+                    final formatted = pickedTime.format(context);
+
+                    scheduleBox.add(Schedule(time: formatted));
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text("Scheduled at $formatted"),
+                        backgroundColor: Colors.grey[800],
+                      ),
+                    );
+                  },
+                  child: const Text("Set Schedule"),
+                ),
+              ),
+            ],
           ),
 
           // Tab 4: Add/Delete Device
