@@ -60,10 +60,10 @@ class DevicePage extends StatefulWidget {
   const DevicePage({super.key});
 
   @override
-  _DevicePageState createState() => _DevicePageState();
+  DevicePageState createState() => DevicePageState();
 }
 
-class _DevicePageState extends State<DevicePage> {
+class DevicePageState extends State<DevicePage> {
   final deviceController = TextEditingController();
 
   @override
